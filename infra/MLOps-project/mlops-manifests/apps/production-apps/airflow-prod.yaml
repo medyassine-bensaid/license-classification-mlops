@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: airflow-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: "https://airflow.apache.org/"
+    chart: airflow
+    targetRevision: "1.18.0"
+    helm:
+      values: |
+        executor: "KubernetesExecutor"
+        web:
+          service:
+            type: ClusterIP
+        postgresql:
+          enabled: true
+        workers:
+          replicas: 2
+        webserver:
+          defaultUser:
+            enabled: true
+            username: admin
+            password: ChangeMeProdAirflowPass!
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: airflow
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

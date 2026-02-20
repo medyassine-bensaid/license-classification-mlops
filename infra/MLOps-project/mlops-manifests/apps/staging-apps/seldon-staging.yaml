@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: seldon-core-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: "https://storage.googleapis.com/seldon-charts"
+    chart: seldon-core-operator
+    targetRevision: "1.17.1"
+    helm:
+      values: |
+        istio:
+          enabled: false
+        usageMetrics:
+          enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: seldon-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

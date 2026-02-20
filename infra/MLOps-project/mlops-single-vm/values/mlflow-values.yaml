@@ -1,0 +1,8 @@
+postgresql:
+  enabled: true
+service:
+  type: ClusterIP
+artifactRoot: "s3://mlflow"
+extraEnvVars:
+  - name: MLFLOW_S3_ENDPOINT_URL
+    value: "http://minio.mlflow-system.svc.cluster.local:9000"

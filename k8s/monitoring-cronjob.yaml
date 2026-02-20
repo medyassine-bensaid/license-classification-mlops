@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: evidently-drift-detection-job
+  namespace: monitoring # Deployed in the monitoring namespace
+spec:
+  # Run every day at midnight UTC
+  schedule: "0 0 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: drift-reporter
+            image: yourdockerhubusername/monitoring-job:latest # The image built by CI
+            env:
+              # Inject the Slack webhook URL from a Kubernetes secret
+              # Create the secret with: kubectl create secret generic slack-webhook --from-literal=SLACK_WEBHOOK_URL='https://hooks.slack.com/...'
+              - name: SLACK_WEBHOOK_URL
+                valueFrom:
+                  secretKeyRef:
+                    name: slack-webhook
+                    key: SLACK_WEBHOOK_URL
+            volumeMounts:
+              # Mount a Persistent Volume to read data from
+              - name: monitoring-data-pv
+                mountPath: /data
+              # Mount a Persistent Volume to write reports to
+              - name: monitoring-reports-pv
+                mountPath: /reports
+          volumes:
+            # This assumes you have PersistentVolumeClaims (PVCs) set up
+            # for storing production traffic logs and generated reports.
+            - name: monitoring-data-pv
+              persistentVolumeClaim:
+                claimName: production-traffic-pvc
+            - name: monitoring-reports-pv
+              persistentVolumeClaim:
+                claimName: drift-reports-pvc
+          restartPolicy: OnFailure
+  # Keep the last 3 successful and 1 failed job logs for debugging
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+

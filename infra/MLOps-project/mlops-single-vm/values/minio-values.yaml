@@ -1,0 +1,6 @@
+auth:
+  rootUser: minio
+  rootPassword: minioStrongPass123!
+defaultBuckets: "mlflow"
+service:
+  type: ClusterIP

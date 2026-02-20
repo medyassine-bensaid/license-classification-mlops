@@ -1,0 +1,23 @@
+# Global Parameters
+project_name: "license-classification"
+mlflow_experiment_name: "license-classification-prod"
+mlflow_tracking_uri: "http://localhost:5000"
+docker_registry: "medyassinebensaid" 
+
+# Feast Parameters
+feast_repo_path: "feature_repo"
+
+
+# Training Parameters
+training:
+  epochs: 10
+  batch_size: 64
+  random_state: 42
+  baseline_accuracy: 0.75 # Quality Gate threshold
+
+# BentoML & Seldon Deployment
+deployment:
+  model_name: "license-classifier"
+  bento_service_name: "license_classifier_service"
+  # This is the full URL to the GitOps manifest repository
+  gitops_manifest_repo_ssh_url: "git@github.com:medyassine-bensaid/mlops-manifests.git"

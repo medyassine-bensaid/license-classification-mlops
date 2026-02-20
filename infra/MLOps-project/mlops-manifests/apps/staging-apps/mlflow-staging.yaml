@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlflow-staging
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: "https://charts.bitnami.com/bitnami"
+    chart: mlflow
+    targetRevision: "1.3.0"
+    helm:
+      values: |
+        postgresql:
+          enabled: true
+        service:
+          type: ClusterIP
+        artifactRoot: "s3://mlflow"
+        extraEnvVars:
+          - name: MLFLOW_S3_ENDPOINT_URL
+            value: "http://minio.mlflow-system.svc.cluster.local:9000"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mlflow-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

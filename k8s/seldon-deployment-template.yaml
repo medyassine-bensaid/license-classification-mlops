@@ -1,0 +1,20 @@
+apiVersion: machinelearning.seldon.io/v1
+kind: SeldonDeployment
+metadata:
+  name: __DEPLOYMENT_NAME__
+  namespace: __NAMESPACE__
+spec:
+  protocol: seldon
+  predictors:
+  - name: default
+    replicas: 1
+    graph:
+      name: classifier
+      implementation: BENTOML_SERVER
+      modelUri: __BENTO_IMAGE__ # This tells Seldon to use the BentoML server
+      endpoint: { type: REST }
+    componentSpecs:
+    - spec:
+        containers:
+        - name: classifier
+          image: __BENTO_IMAGE__ # The full image URL of the BentoML service

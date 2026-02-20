@@ -1,0 +1,13 @@
+executor: KubernetesExecutor
+web:
+  service:
+    type: ClusterIP
+postgresql:
+  enabled: true
+workers:
+  replicas: 1
+webserver:
+  defaultUser:
+    enabled: true
+    username: admin
+    password: admin123

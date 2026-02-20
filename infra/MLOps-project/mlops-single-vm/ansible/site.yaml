@@ -1,0 +1,94 @@
+- name: Install K3s, ingress-nginx and ArgoCD on remote Ubuntu VM
+  hosts: k8s
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Ensure required apt packages present
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Install Docker (if not present)
+      shell: |
+        set -euxo pipefail
+        if ! command -v docker >/dev/null 2>&1; then
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          sudo apt-get update -y
+          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+        fi
+      args:
+        executable: /bin/bash
+
+    - name: Install K3s (disable Traefik)
+      shell: |
+        set -euxo pipefail
+        if [[ ! -x /usr/local/bin/k3s ]]; then
+          curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable=traefik --write-kubeconfig-mode=0644" sh -
+        fi
+      args:
+        creates: /usr/local/bin/k3s
+        executable: /bin/bash
+
+    - name: Wait for kubeconfig on remote
+      wait_for:
+        path: /etc/rancher/k3s/k3s.yaml
+        timeout: 120
+
+    - name: Fetch kubeconfig to controller (local machine)
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ../kubeconfig
+        flat: yes
+
+    - name: Replace 127.0.0.1 in the fetched kubeconfig with remote host (local edit)
+      local_action: shell |
+        sed -i "s/127.0.0.1/{{ inventory_hostname }}/g" ./kubeconfig
+      run_once: true
+
+    - name: Install Helm and add ingress-nginx repo on remote
+      shell: |
+        set -euxo pipefail
+        if ! command -v helm >/dev/null 2>&1; then
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        fi
+        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx || true
+        helm repo update
+      args:
+        executable: /bin/bash
+
+    - name: Install ingress-nginx via Helm (controller.service.type=NodePort)
+      shell: |
+        set -euxo pipefail
+        kubectl create namespace ingress-nginx || true
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx --namespace ingress-nginx \
+          --set controller.service.type=NodePort --wait
+      args:
+        executable: /bin/bash
+
+    - name: Install ArgoCD (official manifest)
+      shell: |
+        set -euxo pipefail
+        kubectl create namespace argocd || true
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+        kubectl -n argocd rollout status deployment argocd-server --timeout=180s || true
+      args:
+        executable: /bin/bash
+
+    - name: Print ArgoCD initial admin password (for user to copy)
+      shell: |
+        kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d || true
+      register: argocd_pass
+      changed_when: false
+
+    - name: Show admin password in ansible output
+      debug:
+        msg: "ArgoCD initial admin password: {{ argocd_pass.stdout }}"

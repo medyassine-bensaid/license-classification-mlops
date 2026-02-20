@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mlops-production-apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: "https://github.com/medyassine-bensaid/mlops-manifests.git"
+    targetRevision: main
+    path: apps/production-apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

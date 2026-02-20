@@ -1,0 +1,77 @@
+name: CI - Build and Push MLOps Component Images
+
+on:
+  push:
+    branches: [ "develop", "main" ]
+
+env:
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY_URL || 'docker.io' }}
+  DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build-component-images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component:
+          - 01_generate_training_data
+          - 02_validate_data
+          - 03_train_and_package
+          - 04_validate_model
+          - 05_promote_and_trigger
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Log in to container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: ./components/${{ matrix.component }}
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_USERNAME }}/${{ matrix.component }}:${{ env.IMAGE_TAG }}
+          
+  build-bentoml-image:
+    runs-on: ubuntu-latest
+    needs: build-component-images # Ensure base components are built first if needed
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.9'
+      
+      - name: Install BentoML and dependencies
+        run: pip install bentoml==1.0.0rc3 -r requirements.txt
+        
+      - name: Run training script to generate Bento
+        # In a real CI, you'd use a small dummy dataset for speed
+        run: python components/03_train_and_package/train_and_build_bento.py --config config/params.yaml --data feature_repo/data/License_Data_With_Timestamp.csv --bento_tag_output bento_tag.txt
+        
+      - name: Get Bento tag
+        id: bento_tag
+        run: echo "::set-output name=tag::$(cat bento_tag.txt)"
+
+      - name: Log in to container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: Build and push BentoML image
+        run: |
+          bentoml containerize ${{ steps.bento_tag.outputs.tag }} --opt no-cache -t ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_USERNAME }}/license_classifier_service:${{ env.IMAGE_TAG }}
+          docker push ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_USERNAME }}/license_classifier_service:${{ env.IMAGE_TAG }}
